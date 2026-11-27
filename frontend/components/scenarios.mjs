@@ -1,0 +1,32 @@
+export const scenarios = [
+  {
+    id: "coffee",
+    label: "Coffee bill",
+    lead: "Who’s buying",
+    accent: "the coffee?",
+    copy: "Two coffees. One bill. Guess your friend’s number first and the next round is on them.",
+    action: "Play for coffee",
+    commitment: "Pick up the coffee bill",
+    alt: "Two friends compare a receipt at a coffee counter.",
+  },
+  {
+    id: "dishes",
+    label: "Dish duty",
+    lead: "Who’s doing",
+    accent: "the dishes?",
+    copy: "Dinner’s done. Take turns guessing with your partner. Whoever loses takes the sink.",
+    action: "Play for dish duty",
+    commitment: "Wash the dishes tonight",
+    alt: "A couple hold a kitchen towel and a sponge beside a stack of plates.",
+  },
+  {
+    id: "pizza",
+    label: "Last slice",
+    lead: "Who gets",
+    accent: "the last slice?",
+    copy: "One slice left at the office. Go head-to-head with a coworker. First to crack the number gets it.",
+    action: "Play for the slice",
+    commitment: "Leave the last slice for the winner",
+    alt: "Two coworkers eye the last slice in a pizza box at lunch.",
+  },
+];

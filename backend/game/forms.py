@@ -25,7 +25,7 @@ class CreateTeam(TeamForm):
 class CreateChallenge(s.Serializer):
     request_id = s.UUIDField()
     title = s.CharField(max_length=90, required=False, allow_blank=True, default="")
-    mode = s.ChoiceField(choices=["duel", "team"])
+    mode = s.ChoiceField(choices=["duel", "team", "live"])
     team_id = s.UUIDField(required=False)
     emails = s.ListField(
         child=s.EmailField(max_length=254),
@@ -61,12 +61,16 @@ class CreateChallenge(s.Serializer):
         data["rounds"] = [
             {"low": low, "high": high, "target": number} for number in numbers
         ]
-        if not data["title"] and data["mode"] == "duel":
-            data["title"] = "Head-to-head challenge"
-        if data["mode"] == "duel" and (
+        if data["mode"] == "live":
+            if len(numbers) != 1:
+                raise s.ValidationError("Live Duo needs one secret number per player.")
+            data["tries"] = data["seconds"] = 0
+        if not data["title"] and data["mode"] != "team":
+            data["title"] = "Live Duo" if data["mode"] == "live" else "Single Challenge"
+        if data["mode"] != "team" and (
             "team_id" in data or len(emails) != 1 or not data["win"] or not data["lose"]
         ):
-            raise s.ValidationError("A duel needs one opponent and both commitments.")
+            raise s.ValidationError("Invite one opponent and enter both commitments.")
         if data["mode"] == "team" and (
             emails or "team_id" not in data or not data["prizes"]
         ):

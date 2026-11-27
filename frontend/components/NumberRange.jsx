@@ -22,7 +22,14 @@ function numberAt(position, stops) {
   );
 }
 
-export default function NumberRange({ low, high, onChange, editing, onEdit }) {
+export default function NumberRange({
+  low,
+  high,
+  onChange,
+  editing,
+  onEdit,
+  live = false,
+}) {
   const [minimum, setMinimum] = useState(1);
   const stops = minimum < 1 ? [minimum, ...positiveStops] : positiveStops;
   const [draft, setDraft] = useState(["", ""]);
@@ -129,7 +136,7 @@ export default function NumberRange({ low, high, onChange, editing, onEdit }) {
         })}
       </div>
       <div className="rangefoot">
-        <small>All rounds · Up to 1M</small>
+        <small>{live ? "Both players" : "All rounds"} · Up to 1M</small>
         <button
           className="inlineedit"
           type="button"

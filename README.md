@@ -1,6 +1,6 @@
 # GuessWar
 
-A browser game for private number challenges. Hosts choose the secret numbers, limits, deadline and stakes. Players preview the invitation, sign in with the invited email, then accept and start a single run.
+A browser game for private number challenges. Play for the coffee bill, dish duty or stakes of your own. Choose a Single Challenge, a live head-to-head match or a team challenge.
 
 ![GuessWar home screen](docs/home.webp)
 
@@ -36,10 +36,11 @@ The local email backend prints the invitation links. Hosts can also copy each re
 
 ## Challenge rules
 
-- A duel has one opponent and two commitments. The opponent wins by solving every round before the deadline.
+- A Single Challenge has one opponent and two commitments. The opponent wins by solving every round before the deadline.
+- In Live Duo, the host locks one secret when sending. The guest accepts by locking a number in the same range. The server randomly picks the first player. Players alternate until the first correct guess wins immediately. There is no guess cap or per-turn timer. If the deadline passes first, the match expires without a winner. Progress survives refreshes and reconnects.
 - A team challenge accepts multiple email addresses and ranked prizes. Every player gets the same sequence of rounds. The final leaderboard opens at the deadline for completed runs. Ranking uses rounds solved, guesses consumed, then elapsed time. An exact tie shares a rank and prize.
-- Hosts set one range for up to 10 secret numbers. The range starts at 1–1,000 by default and supports an upper bound of 1,000,000. Each round allows 3, 7 (default), 13, or 21 guesses. The guess timer defaults to 10 seconds and can be turned off. The challenge stays open for 10 minutes, 1 hour (default), or 1 day from the time the server accepts the send request.
-- Accepting starts a run. Each timed-out turn consumes a guess, including time spent away from the page. Server time governs the outcome. Refreshing resumes the run. Each guess carries the expected turn revision to prevent a retry from spending another guess.
+- For Single and Team Challenges, hosts set one range for up to 10 secret numbers. The range starts at 1–1,000 by default and supports an upper bound of 1,000,000. Each round allows 3, 7 (default), 13, or 21 guesses. The guess timer defaults to 10 seconds and can be turned off. The challenge stays open for 10 minutes, 1 hour (default), or 1 day from the time the server accepts the send request.
+- In Single and Team Challenges, accepting starts a run. Each timed-out turn consumes a guess, including time spent away from the page. Server time governs the outcome. Refreshing resumes the run. Each guess carries the expected turn revision to prevent a retry from spending another guess.
 - Rewards and commitments are fulfilled by the participants. The app records the outcome.
 
 Hosts create, edit and delete saved rosters under **Teams**. Sending a team challenge copies the selected roster into individual invitations. Later roster changes apply to future challenges.

@@ -4,12 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Swords,
+  UserRound,
   UsersRound,
   Plus,
   X,
   Send,
   SlidersHorizontal,
 } from "lucide-react";
+import { scenarios } from "./scenarios.mjs";
 import NumberRange from "./NumberRange";
 import { api, PanelTitle, ErrorLine } from "./ui";
 
@@ -39,8 +41,10 @@ function Choice({ label, value, onChange, options }) {
   );
 }
 
-export default function Create({ initialMode, initialTeam }) {
-  const [mode, setMode] = useState(initialMode === "team" ? "team" : "duel");
+export default function Create({ initialMode, initialTeam, sceneId }) {
+  const [mode, setMode] = useState(
+    ["live", "team"].includes(initialMode) ? initialMode : "duel",
+  );
   const [bounds, setBounds] = useState([1, 1_000]);
   const [low, high] = bounds;
   const [editingRange, setEditingRange] = useState(false);
@@ -53,13 +57,15 @@ export default function Create({ initialMode, initialTeam }) {
     [busy, setBusy] = useState(false);
   const router = useRouter(),
     requestId = useRef(null);
-  const duel = mode === "duel";
+  const teamMode = mode === "team";
+  const live = mode === "live";
+  const stake = scenarios.find((s) => s.id === sceneId)?.commitment || "";
   const [teams, setTeams] = useState(null),
     [teamId, setTeamId] = useState(initialTeam || "");
   const [teamError, setTeamError] = useState(""),
     [reload, setReload] = useState(0);
   useEffect(() => {
-    if (duel) return;
+    if (!teamMode) return;
     let active = true;
     setTeamError("");
     setTeams(null);
@@ -81,9 +87,9 @@ export default function Create({ initialMode, initialTeam }) {
     return () => {
       active = false;
     };
-  }, [duel, reload]);
+  }, [teamMode, reload]);
   const selectedTeam = teams?.find((t) => t.id === teamId);
-  const waitingForTeam = !duel && !teams?.length;
+  const waitingForTeam = teamMode && !teams?.length;
   async function submit(event) {
     event.preventDefault();
     if (busy) return;
@@ -98,14 +104,13 @@ export default function Create({ initialMode, initialTeam }) {
         title: form.title || "",
         low,
         high,
-        numbers: numbers.map(Number),
-        tries,
-        seconds,
+        numbers: (live ? numbers.slice(0, 1) : numbers).map(Number),
+        ...(!live && { tries, seconds }),
         duration_minutes: duration,
-        ...(duel ? { emails: [form.emails.trim()] } : { team_id: teamId }),
+        ...(!teamMode ? { emails: [form.emails.trim()] } : { team_id: teamId }),
         win: form.win || "",
         lose: form.lose || "",
-        prizes: duel ? [] : prizes,
+        prizes: !teamMode ? [] : prizes,
       });
       router.push("/challenge/" + saved.id);
     } catch (e) {
@@ -120,7 +125,8 @@ export default function Create({ initialMode, initialTeam }) {
         <section className="panel buildmain">
           <div className="switcher" aria-label="Challenge type">
             {[
-              ["duel", "Head-to-head", Swords],
+              ["duel", "Single Challenge", UserRound],
+              ["live", "Live Duo", Swords],
               ["team", "Team challenge", UsersRound],
             ].map(([key, label, Icon]) => (
               <button
@@ -135,7 +141,7 @@ export default function Create({ initialMode, initialTeam }) {
               </button>
             ))}
           </div>
-          {duel ? (
+          {!teamMode ? (
             <label>
               Opponent email
               <input
@@ -204,8 +210,9 @@ export default function Create({ initialMode, initialTeam }) {
           {!waitingForTeam && (
             <>
               <div className="buildgroup">
-                <h2>Secret numbers</h2>
+                <h2>{live ? "Your secret number" : "Secret numbers"}</h2>
                 <NumberRange
+                  live={live}
                   editing={editingRange}
                   onEdit={setEditingRange}
                   low={low}
@@ -213,12 +220,16 @@ export default function Create({ initialMode, initialTeam }) {
                   onChange={(a, b) => setBounds([a, b])}
                 />
                 <div className="secrets">
-                  {numbers.map((n, i) => (
+                  {(live ? numbers.slice(0, 1) : numbers).map((n, i) => (
                     <div className="secret" key={i}>
                       <label>
-                        <span>Round {i + 1}</span>
+                        <span>{live ? "Your number" : "Round " + (i + 1)}</span>
                         <input
-                          aria-label={"Round " + (i + 1) + " secret number"}
+                          aria-label={
+                            live
+                              ? "Your secret number"
+                              : "Round " + (i + 1) + " secret number"
+                          }
                           value={n}
                           type="number"
                           step="1"
@@ -235,7 +246,7 @@ export default function Create({ initialMode, initialTeam }) {
                           }
                         />
                       </label>
-                      {numbers.length > 1 && (
+                      {!live && numbers.length > 1 && (
                         <button
                           className="iconbtn"
                           type="button"
@@ -250,7 +261,7 @@ export default function Create({ initialMode, initialTeam }) {
                     </div>
                   ))}
                 </div>
-                {numbers.length < 10 && (
+                {!live && numbers.length < 10 && (
                   <button
                     type="button"
                     className="add"
@@ -261,12 +272,13 @@ export default function Create({ initialMode, initialTeam }) {
                 )}
               </div>
               <div className="buildgroup">
-                <h2>{duel ? "The stakes" : "Ranked prizes"}</h2>
-                {duel ? (
+                <h2>{!teamMode ? "The stakes" : "Ranked prizes"}</h2>
+                {!teamMode ? (
                   <div className="twocol">
                     <label>
                       If they win, I’ll…
                       <input
+                        defaultValue={stake}
                         name="win"
                         placeholder="Buy them a coffee"
                         maxLength={220}
@@ -276,6 +288,7 @@ export default function Create({ initialMode, initialTeam }) {
                     <label>
                       If I win, they’ll…
                       <input
+                        defaultValue={stake}
                         name="lose"
                         placeholder="Pick Friday’s playlist"
                         maxLength={220}
@@ -342,18 +355,29 @@ export default function Create({ initialMode, initialTeam }) {
               options={durations}
             />
             <small>The clock starts when you send.</small>
-            <Choice
-              label="Tries per round"
-              value={tries}
-              onChange={setTries}
-              options={attempts}
-            />
-            <Choice
-              label="Time per guess"
-              value={seconds}
-              onChange={setSeconds}
-              options={timers}
-            />
+            {live ? (
+              <p className="duo-explainer">
+                Each player locks one number. The game picks who goes first.
+                Alternate guesses until someone gets it right or the match
+                closes.
+              </p>
+            ) : (
+              <>
+                {" "}
+                <Choice
+                  label="Tries per round"
+                  value={tries}
+                  onChange={setTries}
+                  options={attempts}
+                />
+                <Choice
+                  label="Time per guess"
+                  value={seconds}
+                  onChange={setSeconds}
+                  options={timers}
+                />
+              </>
+            )}
             <details className="optionalname">
               <summary>Add a challenge name</summary>
               <label className="sr" htmlFor="challengeName">
@@ -364,8 +388,10 @@ export default function Create({ initialMode, initialTeam }) {
                 name="title"
                 maxLength={90}
                 placeholder={
-                  duel
-                    ? "Head-to-head challenge"
+                  !teamMode
+                    ? live
+                      ? "Live Duo"
+                      : "Single Challenge"
                     : selectedTeam
                       ? selectedTeam.name + " challenge"
                       : "Team challenge"
@@ -379,7 +405,7 @@ export default function Create({ initialMode, initialTeam }) {
               disabled={
                 busy ||
                 editingRange ||
-                (!duel && (!selectedTeam || selectedTeam.emails.length < 2))
+                (teamMode && (!selectedTeam || selectedTeam.emails.length < 2))
               }
             >
               {busy ? "Sending…" : "Send challenge"}

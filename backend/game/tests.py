@@ -162,9 +162,7 @@ class ChallengeFlowTests(TestCase):
             self.payload.pop(field)
         self.create()
         c = self.invite.challenge
-        self.assertEqual(
-            (c.tries, c.seconds, c.title), (7, 10, "Head-to-head challenge")
-        )
+        self.assertEqual((c.tries, c.seconds, c.title), (7, 10, "Single Challenge"))
 
     def test_one_million_is_a_playable_secret(self):
         self.payload.update(low=999_999, high=1_000_000, numbers=[1_000_000])
@@ -256,4 +254,90 @@ class ChallengeFlowTests(TestCase):
                 {"name": "Studio", "emails": ["A@example.com", "a@example.com"]},
             ).status_code,
             400,
+        )
+
+    def test_live_numbers_alternate_and_first_correct_guess_ends_match(self):
+        self.payload.update(mode="live", numbers=[22])
+        self.create()
+        duo = self.invite.duo
+        duo.first_player = "host"
+        duo.save()
+        host_url = "/api/challenges/" + str(self.invite.challenge_id)
+        self.assertEqual(self.client.get(host_url).json()["own_secret"], 22)
+        self.assertEqual(
+            self.post(self.url + "/accept", {"value": 77}).status_code, 409
+        )
+        self.assertEqual(
+            self.post(self.url + "/guess", {"revision": 0, "value": 11}).status_code,
+            409,
+        )
+        self.client.logout()
+        preview = self.client.get(self.url).json()
+        self.assertNotIn("own_secret", preview)
+        self.assertNotIn("moves", preview)
+        self.assertNotIn("target", preview["rounds"][0])
+        outsider = get_user_model().objects.create_user("outsider", "other@example.com")
+        self.client.force_login(outsider)
+        self.assertEqual(
+            self.post(self.url + "/accept", {"value": 50}).status_code, 404
+        )
+        self.client.force_login(self.player)
+        self.assertEqual(
+            self.post(self.url + "/accept", {"value": 101}).status_code, 400
+        )
+        state = self.post(self.url + "/accept", {"value": 77}).json()
+        self.assertEqual((state["turn"], state["own_secret"]), ("host", 77))
+        self.assertNotIn("target", state["rounds"][0])
+        self.assertEqual(
+            self.post(self.url + "/accept", {"value": 72}).status_code, 409
+        )
+        self.assertEqual(
+            self.post(self.url + "/guess", {"revision": 0, "value": 22}).status_code,
+            409,
+        )
+        self.client.force_login(self.host)
+        self.assertEqual(self.client.get(self.url).json()["own_secret"], 22)
+        wrong = {"revision": 0, "value": 60}
+        first = self.post(self.url + "/guess", wrong).json()
+        self.assertEqual(
+            first["moves"], [{"player": "host", "value": 60, "hint": "low"}]
+        )
+        self.assertEqual(self.post(self.url + "/guess", wrong).status_code, 409)
+        self.client.force_login(self.player)
+        self.assertEqual(
+            self.post(self.url + "/guess", {"revision": 0, "value": 22}).status_code,
+            409,
+        )
+        win = self.post(self.url + "/guess", {"revision": 1, "value": 22}).json()
+        self.assertEqual(
+            (win["status"], win["winner"], win["turn"]), ("finished", "guest", None)
+        )
+        self.client.force_login(self.host)
+        self.assertEqual(self.client.get(host_url).json()["winner"], "guest")
+        self.assertEqual(
+            self.post(self.url + "/guess", {"revision": 2, "value": 77}).status_code,
+            409,
+        )
+        self.assertEqual(len(self.client.get(self.url).json()["moves"]), 2)
+
+    def test_live_invitation_decline_and_expiration(self):
+        self.payload.update(mode="live")
+        self.assertEqual(self.post("/api/challenges", self.payload).status_code, 400)
+        self.payload.update(numbers=[22])
+        self.create()
+        self.client.force_login(self.player)
+        self.assertEqual(self.post(self.url + "/decline").json()["status"], "declined")
+        self.assertEqual(self.post(self.url + "/accept", {"value": 7}).status_code, 409)
+        self.invite.declined = False
+        self.invite.save()
+        self.post(self.url + "/accept", {"value": 33})
+        Challenge.objects.update(deadline=timezone.now() - timedelta(seconds=1))
+        self.assertEqual(
+            self.post(self.url + "/guess", {"revision": 0, "value": 22}).status_code,
+            409,
+        )
+        expired = self.client.get(self.url).json()
+        self.assertEqual(
+            (expired["status"], expired["winner"], expired["moves"]),
+            ("expired", None, []),
         )

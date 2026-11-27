@@ -140,11 +140,15 @@ export default function Shell({ page, id }) {
     query = useSearchParams();
   const raw = query.get("next") || "/dashboard";
   const target =
-    /^\/(dashboard|teams(?:\?new=1&from=challenge)?|create(?:\?mode=(team|duel)(?:&team=[a-f0-9-]{36})?)?|(?:invite|challenge)\/[a-f0-9-]{36})$/.test(
+    /^\/(dashboard|teams(?:\?new=1&from=challenge)?|create(?:\?mode=(?:team(?:&team=[a-f0-9-]{36})?|live(?:&scene=(?:coffee|dishes|pizza))?|duel|single))?|(?:invite|challenge)\/[a-f0-9-]{36})$/.test(
       raw,
     )
       ? raw
       : "/dashboard";
+  const authNext =
+    (page === "signin" || page === "signup") && query.has("next")
+      ? "?next=" + encodeURIComponent(target)
+      : "";
   const guarded = ["dashboard", "teams", "create", "challenge"].includes(page);
   useEffect(() => {
     api("session")
@@ -193,8 +197,8 @@ export default function Shell({ page, id }) {
               </>
             ) : (
               <>
-                <Link href="/signin">Sign in</Link>
-                <Link className="navcta" href="/signup">
+                <Link href={"/signin" + authNext}>Sign in</Link>
+                <Link className="navcta" href={"/signup" + authNext}>
                   Sign up <ArrowUpRight size={14} />
                 </Link>
               </>
@@ -222,6 +226,8 @@ export default function Shell({ page, id }) {
           />
         ) : page === "create" ? (
           <Create
+            key={query.toString()}
+            sceneId={query.get("scene")}
             initialMode={query.get("mode")}
             initialTeam={query.get("team")}
           />

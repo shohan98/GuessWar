@@ -29,7 +29,8 @@ from .engine import (
     status,
 )
 from .forms import CreateChallenge, CreateTeam, TeamForm
-from .models import Challenge, Invitation, Team
+from .live import live_move, live_state, player_role
+from .models import Challenge, Invitation, LiveDuo, Team
 
 User = get_user_model()
 
@@ -251,9 +252,14 @@ def create(request):
             host=request.user, request_id=request_id, defaults=data
         )
         if new:
-            Invitation.objects.bulk_create(
+            invitations = Invitation.objects.bulk_create(
                 [Invitation(challenge=challenge, email=email) for email in emails]
             )
+            if challenge.mode == "live":
+                LiveDuo.objects.create(
+                    invitation=invitations[0],
+                    first_player=secrets.choice(["host", "guest"]),
+                )
     return JsonResponse({"id": challenge.id}, status=201 if new else 200)
 
 
@@ -268,7 +274,7 @@ def dashboard(request):
     ]
     inbox = [
         {
-            "title": i.challenge.title,
+            "title": i.challenge.display_title,
             "host": i.challenge.host.first_name,
             "mode": i.challenge.mode,
             "invite": i.id,
@@ -289,6 +295,14 @@ def host(request, pk):
     )
     with transaction.atomic():
         now = timezone.now()
+        if challenge.mode == "live":
+            return JsonResponse(
+                live_state(
+                    challenge.invites.select_related("duo", "challenge__host").get(),
+                    "host",
+                    now,
+                )
+            )
         players = []
         for invite in challenge.invites.select_related("challenge"):
             advance(invite, now)
@@ -316,13 +330,21 @@ def host(request, pk):
 
 @api("GET")
 def invite(request, pk):
+    item = get_object_or_404(
+        Invitation.objects.select_related("challenge__host", "duo"), pk=pk
+    )
+    now = timezone.now()
+    if item.challenge.mode == "live":
+        return JsonResponse(live_state(item, player_role(item, request.user), now))
+    own = request.user.is_authenticated and request.user.email == item.email
     with transaction.atomic():
-        item = get_object_or_404(
-            Invitation.objects.select_related("challenge__host"), pk=pk
-        )
-        now = timezone.now()
-        own = request.user.is_authenticated and request.user.email == item.email
         if own:
+            item = (
+                Invitation.objects.select_for_update()
+                .select_related("challenge__host")
+                .get(pk=pk)
+            )
+            now = timezone.now()
             advance(item, now)
             data = player_view(item, now)
             data["ranking"] = leaderboard(item.challenge, now)
@@ -341,9 +363,13 @@ def move(request, pk, action):
         item = get_object_or_404(
             Invitation.objects.select_for_update().select_related("challenge__host"),
             pk=pk,
-            email=request.user.email,
         )
         now = timezone.now()
+        role = player_role(item, request.user)
+        if item.challenge.mode == "live" and role:
+            return live_move(item, role, action, request.data, now)
+        if role != "guest":
+            return fail("Invitation not found.", 404)
         advance(item, now)
         state = status(item, now)
         if action in ("accept", "decline") and state == "invited":

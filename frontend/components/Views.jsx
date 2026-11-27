@@ -14,6 +14,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { api, PanelTitle, ErrorLine, Rules, Stakes, Ranking, date } from "./ui";
+import LiveRoom from "./LiveRoom";
 import Arena, { GuessHistory } from "./Arena";
 
 function useResource(path) {
@@ -78,8 +79,12 @@ export function Dashboard() {
               >
                 <div>
                   <small>
-                    {c.mode === "duel" ? "Head-to-head" : "Team challenge"} ·{" "}
-                    {c.status || "Host"}
+                    {c.mode === "duel"
+                      ? "Single Challenge"
+                      : c.mode === "live"
+                        ? "Live Duo"
+                        : "Team challenge"}{" "}
+                    · {c.status || "Host"}
                   </small>
                   <b>{c.title}</b>
                 </div>
@@ -176,6 +181,7 @@ export function Host({ id }) {
   const refresh = resource.refresh;
   const watch =
     c &&
+    c.mode !== "live" &&
     (c.players.some((p) => ["invited", "playing"].includes(p.status)) ||
       (c.mode === "team" && c.ranking === null));
   useEffect(() => {
@@ -191,6 +197,7 @@ export function Host({ id }) {
     };
   }, [watch, refresh]);
   if (!c) return <Wait {...resource} />;
+  if (c.mode === "live") return <LiveRoom initial={c} />;
   return (
     <>
       <PanelTitle label="HOST VIEW" title={c.title}>
@@ -276,6 +283,7 @@ export function Invite({ id, user }) {
     }
   }
   if (!c) return <Wait {...resource} />;
+  if (c.mode === "live") return <LiveRoom initial={c} user={user} />;
   if (c.status === "playing")
     return (
       <>
@@ -337,7 +345,9 @@ export function Invite({ id, user }) {
   return (
     <>
       <PanelTitle
-        label={c.mode === "duel" ? "DUEL INVITATION" : "TEAM INVITATION"}
+        label={
+          c.mode === "duel" ? "SINGLE CHALLENGE INVITATION" : "TEAM INVITATION"
+        }
         title={c.title}
       >
         <p>
@@ -374,7 +384,7 @@ export function Invite({ id, user }) {
           <Rules c={c} />
           <p>
             {c.mode === "duel"
-              ? "Solve every round to win the duel."
+              ? "Solve every round to win the challenge."
               : "Highest rounds solved wins. Ties use fewest tries, then fastest total time."}{" "}
             {c.seconds > 0 ? "A timed-out guess uses one try." : ""}
           </p>

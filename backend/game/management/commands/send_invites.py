@@ -36,7 +36,7 @@ class Command(BaseCommand):
                 invite.save(update_fields=["sent_at"])
             challenge = invite.challenge
             body = (
-                f"{challenge.host.first_name} invited you to {challenge.title}.\n\n"
+                f"{challenge.host.first_name} invited you to {challenge.display_title}.\n\n"
                 f"Review the rules and rewards before accepting.\n{settings.WEB_ORIGIN}/invite/{invite.id}"
             )
             try:

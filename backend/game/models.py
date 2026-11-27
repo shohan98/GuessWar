@@ -26,6 +26,12 @@ class Challenge(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     request_id = models.UUIDField()
 
+    @property
+    def display_title(self):
+        if self.mode == "duel" and self.title == "Head-to-head challenge":
+            return "Single Challenge"
+        return self.title
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -55,3 +61,12 @@ class Invitation(models.Model):
                 fields=["challenge", "email"], name="one_invitation_per_player"
             )
         ]
+
+
+class LiveDuo(models.Model):
+    invitation = models.OneToOneField(
+        Invitation, primary_key=True, on_delete=models.CASCADE, related_name="duo"
+    )
+    first_player = models.CharField(max_length=5)
+    guest_secret = models.IntegerField(null=True)
+    moves = models.JSONField(default=list)

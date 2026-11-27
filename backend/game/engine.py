@@ -63,7 +63,7 @@ def status(invite, now):
 def info(challenge):
     return {
         "id": str(challenge.pk),
-        "title": challenge.title,
+        "title": challenge.display_title,
         "mode": challenge.mode,
         "host": challenge.host.first_name,
         "rounds": [{"low": r["low"], "high": r["high"]} for r in challenge.rounds],

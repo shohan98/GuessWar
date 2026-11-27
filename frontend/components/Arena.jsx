@@ -27,7 +27,7 @@ const hints = {
 };
 const formatNumber = new Intl.NumberFormat("en-US").format;
 
-export function GuessHistory({ turns }) {
+export function GuessHistory({ turns, viewer }) {
   const list = useRef(null);
   const entries = turns
     .flatMap((guesses, round) =>
@@ -58,11 +58,21 @@ export function GuessHistory({ turns }) {
               <li key={entry.round + "-" + entry.attempt}>
                 <small
                   aria-label={
-                    "Round " + entry.round + ", attempt " + entry.attempt
+                    viewer
+                      ? (entry.player === viewer
+                          ? "Your guess "
+                          : "Opponent guess ") + entry.attempt
+                      : "Round " + entry.round + ", attempt " + entry.attempt
                   }
                 >
-                  {turns.length > 1 ? "R" + entry.round + " · " : ""}#
-                  {entry.attempt}
+                  {viewer
+                    ? entry.player === viewer
+                      ? "You · "
+                      : "Them · "
+                    : turns.length > 1
+                      ? "R" + entry.round + " · "
+                      : ""}
+                  #{entry.attempt}
                 </small>
                 <b>{entry.value === null ? "—" : formatNumber(entry.value)}</b>
                 <span className={"guesshint " + entry.hint}>
@@ -172,7 +182,7 @@ export default function Arena({ c, onGuess, onTimeout, busy, error }) {
             {c.mode === "practice"
               ? "PRACTICE"
               : c.mode === "duel"
-                ? "HEAD-TO-HEAD"
+                ? "SINGLE CHALLENGE"
                 : "TEAM CHALLENGE"}
           </small>
           <h2>{c.title}</h2>

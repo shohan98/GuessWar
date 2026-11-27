@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import HomeBanner from "./HomeBanner";
 import {
   ArrowUpRight,
   Fingerprint,
@@ -9,6 +10,7 @@ import {
   Timer,
   Layers,
   Crosshair,
+  UserRound,
 } from "lucide-react";
 
 export async function api(
@@ -63,7 +65,7 @@ export function Ticket({ team = false, compact = false }) {
           <span>
             <Fingerprint size={16} /> GUESSWAR
           </span>
-          <span>{team ? "TEAM" : "DUEL"} PASS</span>
+          <span>{team ? "TEAM" : "SINGLE"} PASS</span>
         </div>
         <div className="passface">
           <div className="digits">?</div>
@@ -85,34 +87,7 @@ export function Ticket({ team = false, compact = false }) {
 export function Home({ user }) {
   return (
     <>
-      <section className="hero">
-        <div className="herocopy">
-          <div className="eyebrow">
-            <i /> BROWSER ARCADE
-          </div>
-          <h1>
-            Pick a number.
-            <br />
-            <em>Set the stakes.</em>
-          </h1>
-          <p>
-            Hide a number, make a promise, and challenge someone to guess it.
-            Every round starts with an invite.
-          </p>
-          <div className="actions">
-            <Link
-              className="btn primary"
-              href={user ? "/create" : "/signup?next=/create"}
-            >
-              Create a challenge <ArrowUpRight size={18} />
-            </Link>
-            <Link className="textlink" href="/practice">
-              Try a round <span>→</span>
-            </Link>
-          </div>
-        </div>
-        <Ticket />
-      </section>
+      <HomeBanner user={user} />
       <section className="modes">
         <header className="sectiontitle">
           <h2>Choose your matchup</h2>
@@ -121,10 +96,16 @@ export function Home({ user }) {
         <div className="modegrid">
           {[
             [
-              "duel",
+              "single",
+              UserRound,
+              "Single Challenge",
+              "Hide a number and send an invite. Your friend guesses on their own time.",
+            ],
+            [
+              "live",
               Swords,
-              "Head-to-head",
-              "One rival. Two promises. Agree on what happens if either side wins.",
+              "Live Duo",
+              "Go head-to-head. Both players hide a number and take turns guessing. First correct guess wins.",
             ],
             [
               "team",
@@ -187,11 +168,19 @@ export function Stakes({ c }) {
       ) : (
         <>
           <div>
-            <small>If the invitee solves every round</small>
+            <small>
+              {c.mode === "live"
+                ? "If the guest wins, the host will"
+                : "If the invitee solves every round"}
+            </small>
             <b>{c.win}</b>
           </div>
           <div>
-            <small>If the invitee falls short</small>
+            <small>
+              {c.mode === "live"
+                ? "If the host wins, the guest will"
+                : "If the invitee falls short"}
+            </small>
             <b>{c.lose}</b>
           </div>
         </>
