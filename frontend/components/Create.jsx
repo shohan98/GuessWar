@@ -40,7 +40,7 @@ function Choice({ label, value, onChange, options }) {
 
 export default function Create({ initialMode }) {
   const [mode, setMode] = useState(initialMode === "team" ? "team" : "duel");
-  const [bounds, setBounds] = useState([1, 100]);
+  const [bounds, setBounds] = useState([1, 1_000]);
   const [low, high] = bounds;
   const [editingRange, setEditingRange] = useState(false);
   const [numbers, setNumbers] = useState([""]);

@@ -1,7 +1,15 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useState, useRef } from "react";
-import { ArrowRight, ArrowUpRight, Copy, Send, Flag } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  Copy,
+  Send,
+  Flag,
+  Eye,
+  ChevronDown,
+} from "lucide-react";
 import { api, PanelTitle, ErrorLine, Rules, Stakes, Ranking, date } from "./ui";
 import Arena from "./Arena";
 
@@ -83,10 +91,102 @@ export function Dashboard() {
     </>
   );
 }
+function HostPlayerStatus({ player, challenge }) {
+  const total = challenge.rounds.length;
+  const state = player.status;
+  let response = "Awaiting response";
+  if (player.accepted_at) response = "Accepted";
+  else if (state === "declined") response = "Declined";
+  else if (state === "expired") response = "No response";
+
+  let result;
+  switch (state) {
+    case "finished":
+      result =
+        challenge.mode === "team"
+          ? "Completed"
+          : player.solved === total
+            ? "Opponent won"
+            : "You won";
+      break;
+    case "playing":
+      result = "In progress";
+      break;
+    case "expired":
+      result = player.accepted_at
+        ? "Expired before completion"
+        : "Invitation expired";
+      break;
+    case "declined":
+      result = "No contest";
+      break;
+    default:
+      result = "Pending";
+  }
+  return (
+    <div className="hostplayer">
+      <div className="playeridentity">
+        <b>{player.email}</b>
+        <small>
+          {player.delivered
+            ? "Email sent"
+            : state === "invited"
+              ? "Email queued"
+              : "Email not sent"}
+        </small>
+      </div>
+      <dl className="playerdetails">
+        <div>
+          <dt>Response</dt>
+          <dd>
+            <span className={"replymark " + state}>{response}</span>
+          </dd>
+        </div>
+        <div>
+          <dt>Result</dt>
+          <dd>
+            <b>{result}</b>
+            {player.accepted_at && (
+              <small>
+                {player.solved}/{total} solved · {player.tries_used} tries
+              </small>
+            )}
+          </dd>
+        </div>
+      </dl>
+      {state === "finished" && challenge.mode === "duel" && (
+        <div className="fulfilled">
+          <small>Agreed commitment</small>
+          <strong>
+            {player.solved === total ? challenge.win : challenge.lose}
+          </strong>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Host({ id }) {
   const resource = useResource("challenges/" + id),
     { data: c } = resource,
     [copied, setCopied] = useState("");
+  const refresh = resource.refresh;
+  const watch =
+    c &&
+    (c.players.some((p) => ["invited", "playing"].includes(p.status)) ||
+      (c.mode === "team" && c.ranking === null));
+  useEffect(() => {
+    if (!watch) return;
+    function updateVisible() {
+      if (document.visibilityState === "visible") refresh();
+    }
+    const timer = setInterval(updateVisible, 15000);
+    document.addEventListener("visibilitychange", updateVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", updateVisible);
+    };
+  }, [watch, refresh]);
   if (!c) return <Wait {...resource} />;
   return (
     <>
@@ -104,20 +204,8 @@ export function Host({ id }) {
             </div>
             <ErrorLine text={resource.error} />
             {c.players.map((p) => (
-              <div className="matchrow" key={p.id}>
-                <div>
-                  <b>{p.email}</b>
-                  <small>
-                    {p.status === "invited"
-                      ? p.delivered
-                        ? "Email sent"
-                        : "Email queued"
-                      : p.status}
-                    {p.status === "finished"
-                      ? " · " + p.solved + "/" + c.rounds.length + " solved"
-                      : ""}
-                  </small>
-                </div>
+              <div className="matchrow hostrow" key={p.id}>
+                <HostPlayerStatus player={p} challenge={c} />
                 <button
                   className="iconbtn"
                   aria-label={"Copy invitation for " + p.email}
@@ -148,6 +236,19 @@ export function Host({ id }) {
         <aside className="panel summary">
           <h2>Challenge rules</h2>
           <Rules c={c} />
+          <details className="hostsecrets">
+            <summary>
+              <Eye size={16} /> Your selected numbers <ChevronDown size={16} />
+            </summary>
+            <ol>
+              {c.rounds.map((round, i) => (
+                <li key={i}>
+                  <span>Round {i + 1}</span>
+                  <strong>{round.target.toLocaleString("en-US")}</strong>
+                </li>
+              ))}
+            </ol>
+          </details>
           <Stakes c={c} />
         </aside>
       </div>

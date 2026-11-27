@@ -144,6 +144,7 @@ class ChallengeFlowTests(TestCase):
             {"seconds": 17},
             {"duration_minutes": 12},
             {"low": 100},
+            {"high": 1_000_001},
             {"numbers": [22, 101]},
         ):
             with self.subTest(invalid=invalid):
@@ -158,3 +159,43 @@ class ChallengeFlowTests(TestCase):
         self.assertEqual(
             (c.tries, c.seconds, c.title), (7, 10, "Head-to-head challenge")
         )
+
+    def test_one_million_is_a_playable_secret(self):
+        self.payload.update(low=999_999, high=1_000_000, numbers=[1_000_000])
+        self.create()
+        self.client.force_login(self.player)
+        self.post(self.url + "/accept")
+        state = self.post(
+            self.url + "/guess", {"revision": 0, "value": 1_000_000}
+        ).json()
+        self.assertEqual((state["status"], state["solved"]), ("finished", 1))
+
+    def test_host_secrets_and_invitation_responses(self):
+        self.payload.update(
+            mode="team",
+            emails=[self.player.email, "other@example.com"],
+            prizes=["Coffee"],
+        )
+        self.create()
+        host_url = "/api/challenges/" + str(self.invite.challenge_id)
+        self.assertEqual(
+            [r["target"] for r in self.client.get(host_url).json()["rounds"]], [22, 33]
+        )
+        other = Invitation.objects.exclude(pk=self.invite.pk).get()
+        other.declined = True
+        other.save()
+        self.client.force_login(self.player)
+        self.assertEqual(self.client.get(host_url).status_code, 404)
+        self.assertNotContains(self.client.get(self.url), '"target"')
+        self.post(self.url + "/accept")
+        self.assertNotContains(self.client.get(self.url), '"target"')
+        self.post(self.url + "/guess", {"revision": 0, "value": 22})
+        self.client.force_login(self.host)
+        rows = {p["email"]: p for p in self.client.get(host_url).json()["players"]}
+        player = rows[self.player.email]
+        self.assertEqual(
+            (player["status"], player["solved"], player["tries_used"]),
+            ("playing", 1, 1),
+        )
+        self.assertIsNotNone(player["accepted_at"])
+        self.assertEqual(rows[other.email]["status"], "declined")

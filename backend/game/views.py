@@ -238,11 +238,15 @@ def host(request, pk):
                     "delivered": invite.delivered,
                     "id": invite.id,
                     "solved": solved(invite),
+                    "accepted_at": invite.started,
+                    "finished_at": invite.finished,
+                    "tries_used": consumed(invite),
                 }
             )
         return JsonResponse(
             {
                 **info(challenge),
+                "rounds": challenge.rounds,  # Host-only response.
                 "players": players,
                 "ranking": leaderboard(challenge, now),
             }

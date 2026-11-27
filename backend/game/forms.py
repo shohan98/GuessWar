@@ -8,8 +8,8 @@ class CreateChallenge(s.Serializer):
     emails = s.ListField(
         child=s.EmailField(max_length=254), min_length=1, max_length=50
     )
-    low = s.IntegerField(min_value=-999999, max_value=999999)
-    high = s.IntegerField(min_value=-999999, max_value=999999)
+    low = s.IntegerField(min_value=-999999, max_value=1_000_000)
+    high = s.IntegerField(min_value=-999999, max_value=1_000_000)
     numbers = s.ListField(child=s.IntegerField(), min_length=1, max_length=10)
     tries = s.ChoiceField(choices=[3, 7, 13, 21], default=7)
     seconds = s.ChoiceField(choices=[0, 5, 10, 15, 30, 60, 120], default=10)

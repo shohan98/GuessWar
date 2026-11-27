@@ -1,8 +1,30 @@
 "use client";
 import { useState } from "react";
 
+const MAX_NUMBER = 1_000_000;
+const format = new Intl.NumberFormat("en-US").format;
+
+// Each interval gets equal space so smaller ranges remain easy to drag on a phone.
+const positiveStops = [1, 100, 1_000, 10_000, 100_000, MAX_NUMBER];
+
+function positionOf(value, stops) {
+  const upper = stops.findIndex((stop) => stop >= value);
+  if (upper === 0) return 0;
+  return (
+    upper - 1 + (value - stops[upper - 1]) / (stops[upper] - stops[upper - 1])
+  );
+}
+
+function numberAt(position, stops) {
+  const index = Math.min(Math.floor(position), stops.length - 2);
+  return Math.round(
+    stops[index] + (position - index) * (stops[index + 1] - stops[index]),
+  );
+}
+
 export default function NumberRange({ low, high, onChange, editing, onEdit }) {
-  const [scale, setScale] = useState([1, 100]);
+  const [minimum, setMinimum] = useState(1);
+  const stops = minimum < 1 ? [minimum, ...positiveStops] : positiveStops;
   const [draft, setDraft] = useState(["", ""]);
   const [error, setError] = useState("");
   function apply() {
@@ -12,59 +34,102 @@ export default function NumberRange({ low, high, onChange, editing, onEdit }) {
       draft.some((s) => !s.trim()) ||
       !values.every(Number.isInteger) ||
       a < -999999 ||
-      b > 999999 ||
+      b > MAX_NUMBER ||
       a >= b
     ) {
       setError(
-        "Choose two whole numbers from −999999 to 999999, with the minimum below the maximum.",
+        "Choose two whole numbers from −999,999 to 1,000,000, with the minimum below the maximum.",
       );
       return;
     }
-    setScale([Math.min(1, a), Math.max(100, b)]);
+    setMinimum(Math.min(1, a));
     onChange(a, b);
     onEdit(false);
   }
-  const span = scale[1] - scale[0];
+  const end = stops.length - 1;
+  const startPosition = positionOf(low, stops);
+  const endPosition = positionOf(high, stops);
+  const handles = [
+    {
+      label: "Minimum number",
+      value: low,
+      position: startPosition,
+      min: minimum,
+      max: high - 1,
+      update: (value) => onChange(value, high),
+    },
+    {
+      label: "Maximum number",
+      value: high,
+      position: endPosition,
+      min: low + 1,
+      max: MAX_NUMBER,
+      update: (value) => onChange(low, value),
+    },
+  ];
   return (
     <div className="rangebox">
       <div className="rangeheading">
         <strong>Number range</strong>
         <output>
-          {low} – {high}
+          {format(low)} – {format(high)}
         </output>
       </div>
       <div
         className="dualslider"
         style={{
-          "--start": ((low - scale[0]) / span) * 100 + "%",
-          "--end": ((high - scale[0]) / span) * 100 + "%",
+          "--start": (startPosition / end) * 100 + "%",
+          "--end": (endPosition / end) * 100 + "%",
         }}
       >
         <div className="sliderrail">
           <i />
         </div>
-        <input
-          type="range"
-          disabled={editing}
-          aria-label="Minimum number"
-          min={scale[0]}
-          max={scale[1]}
-          value={low}
-          style={{ zIndex: low > scale[0] + span / 2 ? 3 : 1 }}
-          onChange={(e) => onChange(Math.min(+e.target.value, high - 1), high)}
-        />
-        <input
-          type="range"
-          disabled={editing}
-          aria-label="Maximum number"
-          min={scale[0]}
-          max={scale[1]}
-          value={high}
-          onChange={(e) => onChange(low, Math.max(+e.target.value, low + 1))}
-        />
+        {handles.map((handle) => {
+          function update(value) {
+            handle.update(Math.max(handle.min, Math.min(handle.max, value)));
+          }
+          return (
+            <input
+              key={handle.label}
+              type="range"
+              disabled={editing}
+              aria-label={handle.label}
+              aria-valuemin={handle.min}
+              aria-valuemax={handle.max}
+              aria-valuenow={handle.value}
+              aria-valuetext={format(handle.value)}
+              min={0}
+              max={end}
+              step="any"
+              value={handle.position}
+              style={{
+                zIndex:
+                  handle.label === "Minimum number" && startPosition > end / 2
+                    ? 3
+                    : undefined,
+              }}
+              onChange={(event) =>
+                update(numberAt(Number(event.target.value), stops))
+              }
+              onKeyDown={(event) => {
+                const deltas = {
+                  ArrowLeft: -1,
+                  ArrowDown: -1,
+                  ArrowRight: 1,
+                  ArrowUp: 1,
+                };
+                if (event.key in deltas) {
+                  event.preventDefault();
+                  update(handle.value + deltas[event.key]);
+                }
+              }}
+            />
+          );
+        })}
       </div>
       <div className="rangefoot">
-        <small>Shared by every round</small>
+        <small>All rounds · Up to 1M</small>
         <button
           className="inlineedit"
           type="button"
