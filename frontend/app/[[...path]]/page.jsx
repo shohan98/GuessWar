@@ -12,6 +12,7 @@ export default async function Page({ params }) {
       "signup",
       "create",
       "dashboard",
+      "teams",
       "invite",
       "challenge",
       "practice",

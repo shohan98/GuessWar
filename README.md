@@ -42,7 +42,7 @@ The local email backend prints the invitation links. Hosts can also copy each re
 - Accepting starts a run. Each timed-out turn consumes a guess, including time spent away from the page. Server time governs the outcome. Refreshing resumes the run. Each guess carries the expected turn revision to prevent a retry from spending another guess.
 - Rewards and commitments are fulfilled by the participants. The app records the outcome.
 
-Saved teams are planned for a later release. A host will create a team once and select it when sending a team challenge.
+Hosts create, edit and delete saved rosters under **Teams**. Sending a team challenge copies the selected roster into individual invitations. Later roster changes apply to future challenges.
 
 ## Hosting
 

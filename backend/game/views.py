@@ -17,7 +17,6 @@ from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework.exceptions import ValidationError as FormError
 
 from .engine import (
     advance,
@@ -29,8 +28,8 @@ from .engine import (
     solved,
     status,
 )
-from .forms import CreateChallenge
-from .models import Challenge, Invitation
+from .forms import CreateChallenge, CreateTeam, TeamForm
+from .models import Challenge, Invitation, Team
 
 User = get_user_model()
 
@@ -43,11 +42,11 @@ def csrf_failure(request, reason=""):
     return fail("Your session changed. Refresh and try again.", 403)
 
 
-def api(method, member=False):
+def api(*methods, member=False):
     def decorate(fn):
         @wraps(fn)
         def wrapped(request, *args, **kwargs):
-            if request.method != method:
+            if request.method not in methods:
                 return fail("Unsupported method.", 405)
             if member and not request.user.is_authenticated:
                 return fail("Sign in to continue.", 401)
@@ -161,33 +160,95 @@ def account(request, action):
     return JsonResponse({"verify": True})
 
 
+def form_error(details):
+    key, value = next(iter(details.items()))
+    while isinstance(value, (list, dict)):
+        if isinstance(value, dict):
+            value = next(iter(value.values()))
+        else:
+            value = next((entry for entry in value if entry), "Check the input.")
+    prefix = (
+        key.replace("_", " ").capitalize() + ": " if key != "non_field_errors" else ""
+    )
+    return fail(prefix + str(value))
+
+
+def team_data(team):
+    return {"id": team.pk, "name": team.name, "emails": team.emails}
+
+
+@api("GET", "POST", member=True)
+def teams(request):
+    if request.method == "GET":
+        records = Team.objects.filter(owner=request.user).order_by("name", "id")
+        return JsonResponse({"teams": [team_data(team) for team in records]})
+    form = CreateTeam(data=request.data, context={"email": request.user.email})
+    if not form.is_valid():
+        return form_error(form.errors)
+    data = dict(form.validated_data)
+    try:
+        team, created = Team.objects.get_or_create(
+            pk=data.pop("request_id"), owner=request.user, defaults=data
+        )
+    except IntegrityError:
+        return fail("Could not save this team. Reopen the form and try again.", 409)
+    return JsonResponse(team_data(team), status=201 if created else 200)
+
+
+@api("PUT", "DELETE", member=True)
+@transaction.atomic
+def manage_team(request, pk):
+    team = get_object_or_404(
+        Team.objects.select_for_update(), pk=pk, owner=request.user
+    )
+    if request.method == "DELETE":
+        team.delete()
+        return JsonResponse({"deleted": True})
+    form = TeamForm(data=request.data, context={"email": request.user.email})
+    if not form.is_valid():
+        return form_error(form.errors)
+    team.name = form.validated_data["name"]
+    team.emails = form.validated_data["emails"]
+    team.save(update_fields=["name", "emails"])
+    return JsonResponse(team_data(team))
+
+
 @api("POST", member=True)
 def create(request):
     form = CreateChallenge(data=request.data, context={"email": request.user.email})
-    try:
-        form.is_valid(raise_exception=True)
-    except FormError as exc:
-        details = exc.detail
-        key, value = next(iter(details.items()))
-        while isinstance(value, (list, dict)):
-            if isinstance(value, dict):
-                value = next(iter(value.values()))
-            else:
-                value = next((entry for entry in value if entry), "Check the input.")
-        prefix = (
-            key.replace("_", " ").capitalize() + ": "
-            if key != "non_field_errors"
-            else ""
-        )
-        return fail(prefix + str(value))
+    if not form.is_valid():
+        return form_error(form.errors)
     data = dict(form.validated_data)
     emails = data.pop("emails")
     with transaction.atomic():
+        request_id = data.pop("request_id")
+        existing = Challenge.objects.filter(
+            host=request.user, request_id=request_id
+        ).first()
+        if existing:
+            return JsonResponse({"id": existing.pk})
+        if data["mode"] == "team":
+            team = (
+                Team.objects.select_for_update()
+                .filter(pk=data["team_id"], owner=request.user)
+                .first()
+            )
+            if team is None:
+                return fail("This team is unavailable. Select another team.")
+            if not data["title"]:
+                data["title"] = f"{team.name} challenge"
+            emails = team.emails
+            if len(emails) < 2:
+                return fail(
+                    "Add at least two members to the team before sending a challenge."
+                )
+            if len(data["prizes"]) > len(emails):
+                return fail("The number of ranked prizes exceeds the team size.")
         data["deadline"] = timezone.now() + timedelta(
             minutes=data.pop("duration_minutes")
         )
         challenge, new = Challenge.objects.get_or_create(
-            host=request.user, request_id=data.pop("request_id"), defaults=data
+            host=request.user, request_id=request_id, defaults=data
         )
         if new:
             Invitation.objects.bulk_create(

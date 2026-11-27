@@ -1,12 +1,38 @@
+import uuid
+
 from rest_framework import serializers as s
+
+
+class TeamForm(s.Serializer):
+    name = s.CharField(max_length=72)
+    emails = s.ListField(child=s.EmailField(max_length=254), max_length=50)
+
+    def validate_emails(self, values):
+        emails = [email.lower() for email in values]
+        if len(emails) != len(set(emails)):
+            raise s.ValidationError("Enter each member once.")
+        if self.context["email"] in emails:
+            raise s.ValidationError(
+                "Leave your own email out of the roster. You host the challenge."
+            )
+        return emails
+
+
+class CreateTeam(TeamForm):
+    request_id = s.UUIDField(default=uuid.uuid4)
 
 
 class CreateChallenge(s.Serializer):
     request_id = s.UUIDField()
     title = s.CharField(max_length=90, required=False, allow_blank=True, default="")
     mode = s.ChoiceField(choices=["duel", "team"])
+    team_id = s.UUIDField(required=False)
     emails = s.ListField(
-        child=s.EmailField(max_length=254), min_length=1, max_length=50
+        child=s.EmailField(max_length=254),
+        min_length=1,
+        max_length=50,
+        required=False,
+        default=list,
     )
     low = s.IntegerField(min_value=-999999, max_value=1_000_000)
     high = s.IntegerField(min_value=-999999, max_value=1_000_000)
@@ -35,19 +61,17 @@ class CreateChallenge(s.Serializer):
         data["rounds"] = [
             {"low": low, "high": high, "target": number} for number in numbers
         ]
-        if not data["title"]:
-            data["title"] = (
-                "Head-to-head challenge" if data["mode"] == "duel" else "Team challenge"
-            )
+        if not data["title"] and data["mode"] == "duel":
+            data["title"] = "Head-to-head challenge"
         if data["mode"] == "duel" and (
-            len(emails) != 1 or not data["win"] or not data["lose"]
+            "team_id" in data or len(emails) != 1 or not data["win"] or not data["lose"]
         ):
             raise s.ValidationError("A duel needs one opponent and both commitments.")
         if data["mode"] == "team" and (
-            len(emails) < 2 or not 1 <= len(data["prizes"]) <= len(emails)
+            emails or "team_id" not in data or not data["prizes"]
         ):
             raise s.ValidationError(
-                "Invite at least two people and add a prize for each rewarded rank."
+                "Select a saved team and add at least one ranked prize."
             )
         data["emails"] = emails
         return data

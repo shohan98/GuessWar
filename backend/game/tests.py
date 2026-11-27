@@ -43,6 +43,16 @@ class ChallengeFlowTests(TestCase):
         self.invite = Invitation.objects.get(email=self.player.email)
         self.url = "/api/invites/" + str(self.invite.pk)
 
+    def use_team(self):
+        response = self.post(
+            "/api/teams",
+            {"name": "Studio", "emails": [self.player.email, "other@example.com"]},
+        )
+        self.assertEqual(response.status_code, 201)
+        self.team_id = response.json()["id"]
+        self.payload.pop("emails")
+        self.payload.update(mode="team", team_id=self.team_id, prizes=["Coffee"])
+
     def test_identity_retries_and_multiple_rounds(self):
         self.create()
         self.assertEqual(self.post("/api/challenges", self.payload).status_code, 200)
@@ -74,11 +84,7 @@ class ChallengeFlowTests(TestCase):
         self.assertEqual(state["turns"][1][0]["hint"], "timeout")
 
     def test_team_delivery_deadline_and_rank(self):
-        self.payload.update(
-            mode="team",
-            emails=[self.player.email, "other@example.com"],
-            prizes=["Coffee"],
-        )
+        self.use_team()
         self.create()
         call_command("send_invites")
         call_command("send_invites")
@@ -171,11 +177,7 @@ class ChallengeFlowTests(TestCase):
         self.assertEqual((state["status"], state["solved"]), ("finished", 1))
 
     def test_host_secrets_and_invitation_responses(self):
-        self.payload.update(
-            mode="team",
-            emails=[self.player.email, "other@example.com"],
-            prizes=["Coffee"],
-        )
+        self.use_team()
         self.create()
         host_url = "/api/challenges/" + str(self.invite.challenge_id)
         self.assertEqual(
@@ -199,3 +201,59 @@ class ChallengeFlowTests(TestCase):
         )
         self.assertIsNotNone(player["accepted_at"])
         self.assertEqual(rows[other.email]["status"], "declined")
+
+    def test_team_roster_ownership_and_snapshot(self):
+        self.use_team()
+        path = "/api/teams/" + self.team_id
+        self.create()
+        self.client.force_login(self.player)
+        self.assertEqual(self.client.get("/api/teams").json()["teams"], [])
+        self.assertEqual(self.client.delete(path).status_code, 404)
+        self.assertEqual(
+            self.client.put(
+                path, {"name": "Other", "emails": []}, content_type="application/json"
+            ).status_code,
+            404,
+        )
+        self.assertEqual(self.post("/api/challenges", self.payload).status_code, 400)
+        self.client.force_login(self.host)
+        self.assertEqual(
+            self.client.put(
+                path,
+                {"name": "Friday", "emails": ["NEW@example.com"]},
+                content_type="application/json",
+            ).json()["emails"],
+            ["new@example.com"],
+        )
+        self.assertEqual(
+            self.post(
+                "/api/challenges", self.payload | {"request_id": str(uuid.uuid4())}
+            ).status_code,
+            400,
+        )
+        self.assertEqual(self.client.delete(path).status_code, 200)
+        self.assertEqual(self.post("/api/challenges", self.payload).status_code, 200)
+        self.assertEqual(Invitation.objects.count(), 2)
+        self.invite.challenge.refresh_from_db()
+        self.assertIsNone(self.invite.challenge.team_id)
+
+    def test_team_challenge_requires_saved_roster(self):
+        self.assertEqual(
+            self.post(
+                "/api/challenges",
+                self.payload
+                | {
+                    "mode": "team",
+                    "emails": ["a@example.com", "b@example.com"],
+                    "prizes": ["Coffee"],
+                },
+            ).status_code,
+            400,
+        )
+        self.assertEqual(
+            self.post(
+                "/api/teams",
+                {"name": "Studio", "emails": ["A@example.com", "a@example.com"]},
+            ).status_code,
+            400,
+        )

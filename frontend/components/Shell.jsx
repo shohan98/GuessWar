@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowUpRight, LogOut } from "lucide-react";
 import { Brand, Home, api, ErrorLine, PanelTitle, Ticket } from "./ui";
 import Create from "./Create";
+import Teams from "./Teams";
 import { Dashboard, Host, Invite, Practice } from "./Views";
 
 function Auth({ signup, target, onSuccess }) {
@@ -139,12 +140,12 @@ export default function Shell({ page, id }) {
     query = useSearchParams();
   const raw = query.get("next") || "/dashboard";
   const target =
-    /^\/(dashboard|create(?:\?mode=(team|duel))?|(?:invite|challenge)\/[a-f0-9-]{36})$/.test(
+    /^\/(dashboard|teams(?:\?new=1&from=challenge)?|create(?:\?mode=(team|duel)(?:&team=[a-f0-9-]{36})?)?|(?:invite|challenge)\/[a-f0-9-]{36})$/.test(
       raw,
     )
       ? raw
       : "/dashboard";
-  const guarded = ["dashboard", "create", "challenge"].includes(page);
+  const guarded = ["dashboard", "teams", "create", "challenge"].includes(page);
   useEffect(() => {
     api("session")
       .then((d) => setUser(d.user))
@@ -176,6 +177,12 @@ export default function Shell({ page, id }) {
             {user ? (
               <>
                 <Link href="/dashboard">My challenges</Link>
+                <Link
+                  href="/teams"
+                  aria-current={page === "teams" ? "page" : undefined}
+                >
+                  Teams
+                </Link>
                 <button
                   className="iconbtn"
                   aria-label="Sign out"
@@ -214,7 +221,16 @@ export default function Shell({ page, id }) {
             }}
           />
         ) : page === "create" ? (
-          <Create initialMode={query.get("mode")} />
+          <Create
+            initialMode={query.get("mode")}
+            initialTeam={query.get("team")}
+          />
+        ) : page === "teams" ? (
+          <Teams
+            key={query.toString()}
+            startNew={query.get("new") === "1"}
+            fromChallenge={query.get("from") === "challenge"}
+          />
         ) : page === "dashboard" ? (
           <Dashboard />
         ) : page === "invite" ? (

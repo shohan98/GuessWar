@@ -11,13 +11,17 @@ import {
   Crosshair,
 } from "lucide-react";
 
-export async function api(path, body) {
+export async function api(
+  path,
+  body,
+  method = body === undefined ? "GET" : "POST",
+) {
   const token = document.cookie
     .split("; ")
     .find((v) => v.startsWith("csrftoken="))
     ?.slice(10);
   const response = await fetch("/api/" + path, {
-    method: body === undefined ? "GET" : "POST",
+    method,
     cache: "no-store",
     headers: { "Content-Type": "application/json", "X-CSRFToken": token || "" },
     body: JSON.stringify(body),

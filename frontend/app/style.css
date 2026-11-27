@@ -1321,3 +1321,88 @@ textarea::placeholder {
   font-family: var(--mono);
   color: var(--ink);
 }
+.teamspage {
+  max-width: 850px;
+  margin: auto;
+}
+.teamempty {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding-block: 26px;
+}
+.teamempty > svg,
+.teamglyph {
+  color: var(--ice);
+}
+.teamempty h2,
+.teamline h2 {
+  margin: 0;
+}
+.teamempty p,
+.teamconfirm p {
+  color: var(--muted);
+  max-width: 46ch;
+}
+.teamloading {
+  margin-top: 18px;
+}
+.teamselect {
+  background: #131722;
+  border: 1px solid #42495a;
+  border-radius: 7px;
+  color: var(--ink);
+  padding: 11px 13px;
+  font: inherit;
+  width: 100%;
+}
+.teamline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.teamtitle {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.teamline h2 {
+  font-size: 26px;
+}
+.teamglyph {
+  display: grid;
+  place-items: center;
+  background: #21343d;
+  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+}
+.teamlist article + article {
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+  margin-top: 18px;
+}
+.teamplay {
+  width: fit-content;
+  margin: 8px 0 0 50px;
+}
+.teamconfirm {
+  margin-top: 15px;
+}
+.teamconfirm .actions {
+  margin-top: 8px;
+}
+nav a[aria-current="page"] {
+  color: var(--hot);
+}
+@media (max-width: 430px) {
+  .navinner nav {
+    gap: 10px;
+  }
+  .navinner nav a {
+    font-size: 13px;
+  }
+  .teamspage > .toprow {
+    margin-bottom: 16px;
+  }
+}
