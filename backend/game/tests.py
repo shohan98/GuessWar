@@ -1,0 +1,111 @@
+import uuid
+from datetime import timedelta
+
+from django.contrib.auth import get_user_model
+from django.core import mail
+from django.core.management import call_command
+from django.test import TestCase
+from django.utils import timezone
+
+from .models import Challenge, Invitation
+
+
+class ChallengeFlowTests(TestCase):
+    def setUp(self):
+        user = get_user_model()
+        self.host = user.objects.create_user(
+            "host@example.com", "host@example.com", first_name="Host"
+        )
+        self.player = user.objects.create_user(
+            "player@example.com", "player@example.com", first_name="Player"
+        )
+        self.payload = dict(
+            request_id=str(uuid.uuid4()),
+            title="Coffee Duel",
+            mode="duel",
+            emails=[self.player.email],
+            rounds=[dict(low=1, high=100, target=22), dict(low=1, high=100, target=33)],
+            tries=2,
+            seconds=10,
+            deadline=(timezone.now() + timedelta(days=1)).isoformat(),
+            win="Host buys coffee",
+            lose="Player buys coffee",
+        )
+        self.client.force_login(self.host)
+
+    def post(self, url, data=None):
+        return self.client.post(url, data or {}, content_type="application/json")
+
+    def create(self):
+        self.assertEqual(self.post("/api/challenges", self.payload).status_code, 201)
+        self.invite = Invitation.objects.get(email=self.player.email)
+        self.url = "/api/invites/" + str(self.invite.pk)
+
+    def test_identity_retries_and_multiple_rounds(self):
+        self.create()
+        self.assertEqual(self.post("/api/challenges", self.payload).status_code, 200)
+        self.assertEqual(Invitation.objects.count(), 1)
+        self.assertNotContains(self.client.get(self.url), '"target"')
+        self.assertEqual(self.post(self.url + "/accept").status_code, 404)
+        self.client.force_login(self.player)
+        self.assertEqual(self.post(self.url + "/accept").json()["status"], "playing")
+        first = {"revision": 0, "value": 22}
+        self.assertEqual(self.post(self.url + "/guess", first).json()["solved"], 1)
+        self.assertEqual(self.post(self.url + "/guess", first).status_code, 409)
+        self.assertEqual(
+            self.post(self.url + "/guess", {"revision": 1, "value": 33}).json()[
+                "status"
+            ],
+            "finished",
+        )
+        self.assertEqual(self.client.get(self.url).json()["solved"], 2)
+
+    def test_refresh_consumes_elapsed_turns(self):
+        self.create()
+        self.client.force_login(self.player)
+        self.post(self.url + "/accept")
+        then = timezone.now() - timedelta(seconds=31)
+        Invitation.objects.update(started=then, turn_start=then)
+        state = self.client.get(self.url).json()
+        self.assertEqual(state["revision"], 3)
+        self.assertEqual(len(state["turns"]), 2)
+        self.assertEqual(state["turns"][1][0]["hint"], "timeout")
+
+    def test_team_delivery_deadline_and_rank(self):
+        self.payload.update(
+            mode="team",
+            emails=[self.player.email, "other@example.com"],
+            prizes=["Coffee"],
+        )
+        self.create()
+        call_command("send_invites")
+        call_command("send_invites")
+        self.assertEqual(len(mail.outbox), 2)
+        self.client.force_login(self.player)
+        self.post(self.url + "/accept")
+        self.post(self.url + "/guess", {"revision": 0, "value": 22})
+        self.post(self.url + "/guess", {"revision": 1, "value": 33})
+        self.assertIsNone(self.client.get(self.url).json()["ranking"])
+        Challenge.objects.update(deadline=timezone.now())
+        row = self.client.get(self.url).json()["ranking"][0]
+        self.assertEqual((row["rank"], row["gift"], row["solved"]), (1, "Coffee", 2))
+        self.client.force_login(self.host)
+        self.assertEqual(
+            self.client.get("/api/challenges/" + str(self.invite.challenge_id)).json()[
+                "players"
+            ][1]["status"],
+            "expired",
+        )
+
+    def test_deadline_excludes_unfinished_run(self):
+        self.payload.update(seconds=0)
+        self.create()
+        self.client.force_login(self.player)
+        self.post(self.url + "/accept")
+        Challenge.objects.update(deadline=timezone.now() - timedelta(seconds=1))
+        self.assertEqual(
+            self.post(self.url + "/guess", {"revision": 0, "value": 22}).json()[
+                "status"
+            ],
+            "expired",
+        )
