@@ -1,6 +1,17 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
-import { Delete, Volume2, VolumeX, Timer } from "lucide-react";
+import {
+  Delete,
+  Volume2,
+  VolumeX,
+  Timer,
+  ArrowDown,
+  ArrowUp,
+  Check,
+  History,
+  Clock3,
+  Crosshair,
+} from "lucide-react";
 import { ErrorLine } from "./ui";
 const words = {
   high: "Too high. Bring it down!",
@@ -8,6 +19,110 @@ const words = {
   correct: "Right on the number!",
   timeout: "Time slipped away.",
 };
+const hints = {
+  high: { label: "Too high", icon: ArrowDown },
+  low: { label: "Too low", icon: ArrowUp },
+  correct: { label: "Correct", icon: Check },
+  timeout: { label: "Time up", icon: Clock3 },
+};
+const formatNumber = new Intl.NumberFormat("en-US").format;
+
+export function GuessHistory({ turns }) {
+  const list = useRef(null);
+  const entries = turns
+    .flatMap((guesses, round) =>
+      guesses.map((guess, attempt) => ({
+        ...guess,
+        round: round + 1,
+        attempt: attempt + 1,
+      })),
+    )
+    .reverse();
+  useEffect(() => {
+    if (list.current) {
+      list.current.scrollTop = 0;
+      list.current.scrollLeft = 0;
+    }
+  }, [entries.length]);
+  return (
+    <aside className="guesshistory" aria-label="Guess history">
+      <h3>
+        <History size={17} aria-hidden="true" />
+        Guess history
+      </h3>
+      {entries.length ? (
+        <ol ref={list} aria-label="Newest guess first">
+          {entries.map((entry) => {
+            const { label, icon: Icon } = hints[entry.hint];
+            return (
+              <li key={entry.round + "-" + entry.attempt}>
+                <small
+                  aria-label={
+                    "Round " + entry.round + ", attempt " + entry.attempt
+                  }
+                >
+                  {turns.length > 1 ? "R" + entry.round + " · " : ""}#
+                  {entry.attempt}
+                </small>
+                <b>{entry.value === null ? "—" : formatNumber(entry.value)}</b>
+                <span className={"guesshint " + entry.hint}>
+                  <Icon size={14} aria-hidden="true" />
+                  {label}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      ) : (
+        <p>No guesses yet</p>
+      )}
+    </aside>
+  );
+}
+
+function Feedback({ guesses, round, previous }) {
+  const last = guesses.at(-1);
+  let title = "Make a guess",
+    detail = "Enter a number in the range.",
+    tone = "ready",
+    Icon = Crosshair;
+  if (last) {
+    const hint = hints[last.hint];
+    title = hint.label;
+    Icon = hint.icon;
+    tone = last.hint;
+    detail =
+      last.value === null
+        ? "That attempt used one try."
+        : "You guessed " + formatNumber(last.value);
+  } else if (round > 0) {
+    const solved = previous.at(-1)?.hint === "correct";
+    title = solved ? "Round solved" : "Round finished";
+    detail = "Round " + (round + 1) + " is ready.";
+    tone = solved ? "correct" : "ready";
+    Icon = solved ? Check : Crosshair;
+  }
+  return (
+    <div
+      className={"guessfeedback " + tone}
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <Icon size={30} aria-hidden="true" strokeWidth={2.5} />
+      <div>
+        <strong>{title}</strong>
+        <span>{detail}</span>
+      </div>
+      {last && (
+        <span className="sr">
+          Round {round + 1}, attempt {guesses.length}.
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function Arena({ c, onGuess, onTimeout, busy, error }) {
   const [value, setValue] = useState(""),
     [remaining, setRemaining] = useState(0),
@@ -86,74 +201,77 @@ export default function Arena({ c, onGuess, onTimeout, busy, error }) {
           {c.seconds ? remaining + "s" : "Untimed"}
         </span>
       </div>
-      <form
-        className="console"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (valid && !busy) onGuess(Number(value));
-        }}
-      >
-        <span className="eyebrow">GUESS THE NUMBER</span>
-        <h1>
-          {low} <em>—</em> {high}
-        </h1>
-        <label className="numberbox">
-          <span className="sr">Your guess</span>
-          <input
-            ref={ref}
-            autoComplete="off"
-            inputMode={low < 0 ? "text" : "numeric"}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            maxLength={8}
-            placeholder="?"
+      <div className="arenalayout">
+        <form
+          className="console"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (valid && !busy) onGuess(Number(value));
+          }}
+        >
+          <span className="eyebrow">GUESS THE NUMBER</span>
+          <h1>
+            {low} <em>—</em> {high}
+          </h1>
+          <label className="numberbox">
+            <span className="sr">Your guess</span>
+            <input
+              ref={ref}
+              autoComplete="off"
+              inputMode={low < 0 ? "text" : "numeric"}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              maxLength={8}
+              placeholder="?"
+            />
+          </label>
+          <Feedback
+            guesses={guesses}
+            round={round}
+            previous={c.turns[round - 1]}
           />
-        </label>
-        <div className="feedback" aria-live="polite">
-          {last
-            ? (last.value === null ? "" : last.value + " · ") + words[last.hint]
-            : "Enter your first guess"}
-        </div>
-        <div className="keypad">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+          <div className="keypad">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setValue((v) => (v + n).slice(0, 8))}
+              >
+                {n}
+              </button>
+            ))}
             <button
-              key={n}
+              aria-label="Delete digit"
               type="button"
-              onClick={() => setValue((v) => (v + n).slice(0, 8))}
+              onClick={() => setValue((v) => v.slice(0, -1))}
             >
-              {n}
+              <Delete size={17} />
             </button>
-          ))}
-          <button
-            aria-label="Delete digit"
-            type="button"
-            onClick={() => setValue((v) => v.slice(0, -1))}
-          >
-            <Delete size={17} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setValue((v) => (v + "0").slice(0, 8))}
-          >
-            0
-          </button>
-          <button className="submitkey" disabled={!valid || busy}>
-            Guess
-          </button>
-        </div>
-        {low < 0 && (
-          <button
-            className="add"
-            type="button"
-            onClick={() =>
-              setValue((v) => (v.startsWith("-") ? v.slice(1) : "-" + v))
-            }
-          >
-            +/− Sign
-          </button>
-        )}
-        <ErrorLine text={error} />
-      </form>
+            <button
+              type="button"
+              onClick={() => setValue((v) => (v + "0").slice(0, 8))}
+            >
+              0
+            </button>
+            <button className="submitkey" disabled={!valid || busy}>
+              Guess
+            </button>
+          </div>
+          {low < 0 && (
+            <button
+              className="add"
+              type="button"
+              onClick={() =>
+                setValue((v) => (v.startsWith("-") ? v.slice(1) : "-" + v))
+              }
+            >
+              +/− Sign
+            </button>
+          )}
+          <ErrorLine text={error} />
+        </form>
+        <GuessHistory turns={c.turns} />
+      </div>
       <div
         className={"robot " + (last?.hint || "thinking")}
         role="img"

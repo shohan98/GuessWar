@@ -6,12 +6,15 @@ import {
   ArrowUpRight,
   Copy,
   Send,
+  Trophy,
+  CircleX,
+  RotateCcw,
   Flag,
   Eye,
   ChevronDown,
 } from "lucide-react";
 import { api, PanelTitle, ErrorLine, Rules, Stakes, Ranking, date } from "./ui";
-import Arena from "./Arena";
+import Arena, { GuessHistory } from "./Arena";
 
 function useResource(path) {
   const [data, setData] = useState(null),
@@ -326,6 +329,7 @@ export function Invite({ id, user }) {
         <Link className="btn primary" href="/create">
           Create a rematch <ArrowUpRight size={16} />
         </Link>
+        <GuessHistory turns={c.turns} />
       </section>
     );
   }
@@ -415,6 +419,84 @@ export function Invite({ id, user }) {
     </>
   );
 }
+function PracticeResult({ turns, secret, onRestart }) {
+  const guesses = turns[0];
+  const won = guesses.at(-1).hint === "correct";
+  const heading = useRef(null);
+  useEffect(() => {
+    heading.current?.focus();
+  }, []);
+  let closest;
+  if (!won) {
+    closest = guesses.reduce((best, guess) =>
+      Math.abs(guess.value - secret) < Math.abs(best.value - secret)
+        ? guess
+        : best,
+    );
+  }
+  return (
+    <section className="practice-result" aria-labelledby="practice-outcome">
+      <div className={"outcome-card " + (won ? "victory" : "defeat")}>
+        {won ? (
+          <>
+            <div className="victory-medal" aria-hidden="true">
+              <Trophy size={42} strokeWidth={1.7} />
+            </div>
+            <p className="outcome-label">Practice victory</p>
+            <h1 ref={heading} tabIndex={-1} id="practice-outcome">
+              You won!
+            </h1>
+            <p className="outcome-copy">
+              You found <strong>{secret}</strong>{" "}
+              {guesses.length === 1
+                ? "on your first guess."
+                : "in " + guesses.length + " guesses."}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="outcome-label">
+              <CircleX size={21} aria-hidden="true" />
+              Practice defeat
+            </p>
+            <h1 ref={heading} tabIndex={-1} id="practice-outcome">
+              Out of tries
+            </h1>
+            <dl className="guess-comparison">
+              <div>
+                <dt>Secret number</dt>
+                <dd>{secret}</dd>
+              </div>
+              <div>
+                <dt>Closest guess</dt>
+                <dd>{closest.value}</dd>
+              </div>
+            </dl>
+            <p className="outcome-copy">
+              Your closest guess was{" "}
+              <strong>
+                {Math.abs(closest.value - secret)}{" "}
+                {closest.hint === "high" ? "above" : "below"}
+              </strong>{" "}
+              the secret number.
+            </p>
+          </>
+        )}
+        <div className="actions">
+          <button className="btn primary" onClick={onRestart}>
+            <RotateCcw size={16} aria-hidden="true" />
+            {won ? "Play again" : "Try again"}
+          </button>
+          <Link className="textlink" href="/create">
+            Challenge a friend <Send size={15} aria-hidden="true" />
+          </Link>
+        </div>
+      </div>
+      <GuessHistory turns={turns} />
+    </section>
+  );
+}
+
 export function Practice() {
   const secret = useRef(0);
   const [c, setC] = useState(null),
@@ -447,29 +529,11 @@ export function Practice() {
   }
   if (done)
     return (
-      <section className="panel result">
-        <Flag className="resulticon" />
-        <PanelTitle
-          label="PRACTICE COMPLETE"
-          title={
-            c.turns[0].at(-1).hint === "correct"
-              ? "Number cracked!"
-              : "Out of tries"
-          }
-        />
-        <div className="resultnum">{secret.current}</div>
-        <p>
-          {c.revision} of {c.tries} guesses used
-        </p>
-        <div className="actions">
-          <button className="btn primary" onClick={start}>
-            Play again
-          </button>
-          <Link className="textlink" href="/create">
-            Challenge a friend <Send size={15} />
-          </Link>
-        </div>
-      </section>
+      <PracticeResult
+        turns={c.turns}
+        secret={secret.current}
+        onRestart={start}
+      />
     );
   return <Arena c={c} onGuess={guess} onTimeout={start} />;
 }
