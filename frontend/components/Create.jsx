@@ -1,235 +1,219 @@
 "use client";
-import { useState, useRef } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Swords,
   UsersRound,
   Plus,
-  Minus,
+  X,
   Send,
-  Ticket as TicketIcon,
+  SlidersHorizontal,
 } from "lucide-react";
-import { api, PanelTitle, ErrorLine, Rules } from "./ui";
+import NumberRange from "./NumberRange";
+import { api, PanelTitle, ErrorLine } from "./ui";
 
-function tomorrow() {
-  const d = new Date(Date.now() + 86400000);
-  return new Date(+d - d.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16);
+const durations = [
+  [10, "10 minutes"],
+  [60, "1 hour"],
+  [1440, "1 day"],
+];
+const timers = [
+  [0, "No timer"],
+  ...[5, 10, 15, 30, 60, 120].map((n) => [n, n + " seconds"]),
+];
+const attempts = [3, 7, 13, 21].map((n) => [n, n + " tries"]);
+
+function Choice({ label, value, onChange, options }) {
+  return (
+    <label className="setting">
+      <span>{label}</span>
+      <select value={value} onChange={(e) => onChange(Number(e.target.value))}>
+        {options.map(([v, t]) => (
+          <option key={v} value={v}>
+            {t}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
+
 export default function Create({ initialMode }) {
-  const [mode, setMode] = useState(initialMode === "team" ? "team" : "duel"),
-    [rounds, setRounds] = useState([{ low: 1, high: 100, target: "" }]);
+  const [mode, setMode] = useState(initialMode === "team" ? "team" : "duel");
+  const [bounds, setBounds] = useState([1, 100]);
+  const [low, high] = bounds;
+  const [editingRange, setEditingRange] = useState(false);
+  const [numbers, setNumbers] = useState([""]);
   const [tries, setTries] = useState(7),
     [seconds, setSeconds] = useState(10),
-    [prizes, setPrizes] = useState([""]);
-  const [title, setTitle] = useState(""),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
-  const requestId = useRef(null),
-    router = useRouter();
-  function changeRound(index, key, value) {
-    setRounds((rows) =>
-      rows.map((r, i) => (i === index ? { ...r, [key]: value } : r)),
-    );
-  }
-  async function submit(e) {
-    e.preventDefault();
+    [duration, setDuration] = useState(60);
+  const [prizes, setPrizes] = useState([""]);
+  const [error, setError] = useState(""),
+    [busy, setBusy] = useState(false);
+  const router = useRouter(),
+    requestId = useRef(null);
+  const duel = mode === "duel";
+  async function submit(event) {
+    event.preventDefault();
+    if (busy) return;
     setError("");
     setBusy(true);
-    const d = Object.fromEntries(new FormData(e.currentTarget));
+    const form = Object.fromEntries(new FormData(event.currentTarget));
     requestId.current ||= crypto.randomUUID();
     try {
       const saved = await api("challenges", {
         request_id: requestId.current,
-        title,
         mode,
-        rounds,
+        title: form.title || "",
+        low,
+        high,
+        numbers: numbers.map(Number),
         tries,
         seconds,
-        deadline: new Date(d.deadline).toISOString(),
-        emails: d.emails.split(/[\s,;]+/).filter(Boolean),
-        win: d.win || "",
-        lose: d.lose || "",
-        prizes: mode === "team" ? prizes : [],
+        duration_minutes: duration,
+        emails: form.emails.split(/[\s,;]+/).filter(Boolean),
+        win: form.win || "",
+        lose: form.lose || "",
+        prizes: duel ? [] : prizes,
       });
       router.push("/challenge/" + saved.id);
-    } catch (err) {
-      setError(err.message);
+    } catch (e) {
+      setError(e.message);
       setBusy(false);
     }
   }
   return (
     <>
       <PanelTitle label="CHALLENGE STUDIO" title="Create a challenge" />
-      <form className="formgrid" onSubmit={submit}>
-        <div className="formsections">
-          <section className="panel">
-            <h2>Match setup</h2>
-            <div className="switcher">
-              {[
-                ["duel", "Head-to-head", Swords],
-                ["team", "Team challenge", UsersRound],
-              ].map(([v, t, Icon]) => (
-                <button
-                  type="button"
-                  key={v}
-                  aria-pressed={mode === v}
-                  className={mode === v ? "selected" : ""}
-                  onClick={() => setMode(v)}
-                >
-                  <Icon size={16} />
-                  {t}
-                </button>
-              ))}
-            </div>
-            <label>
-              Challenge name
+      <form className="formgrid builder" onSubmit={submit}>
+        <section className="panel buildmain">
+          <div className="switcher" aria-label="Challenge type">
+            {[
+              ["duel", "Head-to-head", Swords],
+              ["team", "Team challenge", UsersRound],
+            ].map(([key, label, Icon]) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={key === mode}
+                className={key === mode ? "selected" : ""}
+                onClick={() => setMode(key)}
+              >
+                <Icon size={17} />
+                {label}
+              </button>
+            ))}
+          </div>
+          <label>
+            {duel ? "Opponent email" : "Team emails"}
+            {duel ? (
               <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Friday coffee showdown"
-                maxLength={90}
-                required
-              />
-            </label>
-            <label>
-              {mode === "duel" ? "Opponent email" : "Team emails"}
-              <textarea
-                key={mode}
+                type="email"
+                key="duel"
                 name="emails"
-                rows={mode === "duel" ? 1 : 2}
-                placeholder={
-                  mode === "duel"
-                    ? "friend@example.com"
-                    : "Separate addresses with commas or new lines"
-                }
+                placeholder="friend@example.com"
                 required
               />
-            </label>
-            <label>
-              Finish by{" "}
-              <input
-                name="deadline"
-                type="datetime-local"
-                defaultValue={tomorrow()}
+            ) : (
+              <textarea
+                key="team"
+                name="emails"
+                rows={2}
+                placeholder="Separate teammates’ emails with commas"
                 required
               />
-              <small>Your local time</small>
-            </label>
-          </section>
-          <section className="panel">
-            <h2>Rounds & limits</h2>
-            <div className="twocol">
-              <label>
-                Max tries per round
-                <input
-                  type="number"
-                  min="1"
-                  max="20"
-                  required
-                  value={tries}
-                  onChange={(e) => setTries(e.target.value)}
-                />
-              </label>
-              <label>
-                Seconds per guess
-                <input
-                  type="number"
-                  min="0"
-                  max="120"
-                  required
-                  value={seconds}
-                  onChange={(e) => setSeconds(e.target.value)}
-                />
-                <small>0 turns off this timer</small>
-              </label>
-            </div>
-            {rounds.map((r, i) => (
-              <div className="roundentry" key={i}>
-                <div className="roundlabel">
-                  Round {i + 1}
-                  {rounds.length > 1 && (
+            )}
+          </label>
+          <div className="buildgroup">
+            <h2>Secret numbers</h2>
+            <NumberRange
+              editing={editingRange}
+              onEdit={setEditingRange}
+              low={low}
+              high={high}
+              onChange={(a, b) => setBounds([a, b])}
+            />
+            <div className="secrets">
+              {numbers.map((n, i) => (
+                <div className="secret" key={i}>
+                  <label>
+                    <span>Round {i + 1}</span>
+                    <input
+                      aria-label={"Round " + (i + 1) + " secret number"}
+                      value={n}
+                      type="number"
+                      step="1"
+                      min={low}
+                      max={high}
+                      placeholder="Secret number"
+                      required
+                      onChange={(e) =>
+                        setNumbers(
+                          numbers.map((v, j) => (j === i ? e.target.value : v)),
+                        )
+                      }
+                    />
+                  </label>
+                  {numbers.length > 1 && (
                     <button
-                      aria-label={"Remove round " + (i + 1)}
+                      className="iconbtn"
                       type="button"
+                      aria-label={"Remove round " + (i + 1)}
                       onClick={() =>
-                        setRounds(rounds.filter((_, j) => j !== i))
+                        setNumbers(numbers.filter((_, j) => i !== j))
                       }
                     >
-                      <Minus size={15} />
+                      <X size={14} />
                     </button>
                   )}
                 </div>
-                <div className="threecol">
-                  {[
-                    ["low", "Min"],
-                    ["high", "Max"],
-                    ["target", "Secret number"],
-                  ].map(([k, t]) => (
-                    <label key={k}>
-                      {t}
-                      <input
-                        type="number"
-                        required
-                        value={r[k]}
-                        min={k === "target" ? r.low : -999999}
-                        max={k === "target" ? r.high : 999999}
-                        onChange={(e) => changeRound(i, k, e.target.value)}
-                      />
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ))}
-            {rounds.length < 10 && (
+              ))}
+            </div>
+            {numbers.length < 10 && (
               <button
-                className="add"
                 type="button"
-                onClick={() =>
-                  setRounds([...rounds, { low: 1, high: 100, target: "" }])
-                }
+                className="add"
+                onClick={() => setNumbers([...numbers, ""])}
               >
-                <Plus size={15} />
-                Add round
+                <Plus size={16} /> Add round
               </button>
             )}
-          </section>
-          <section className="panel">
-            <h2>{mode === "duel" ? "Your commitments" : "Ranked prizes"}</h2>
-            {mode === "duel" ? (
-              <>
+          </div>
+          <div className="buildgroup">
+            <h2>{duel ? "The stakes" : "Ranked prizes"}</h2>
+            {duel ? (
+              <div className="twocol">
                 <label>
-                  If your opponent solves every round, what will you do?
+                  If they win, I’ll…
                   <input
                     name="win"
-                    placeholder="I’ll buy them coffee."
-                    required
+                    placeholder="Buy them a coffee"
                     maxLength={220}
+                    required
                   />
                 </label>
                 <label>
-                  If they fall short, what will they do?
+                  If I win, they’ll…
                   <input
                     name="lose"
-                    placeholder="They’ll pick our next team playlist."
-                    required
+                    placeholder="Pick Friday’s playlist"
                     maxLength={220}
+                    required
                   />
                 </label>
-              </>
+              </div>
             ) : (
               <>
                 {prizes.map((p, i) => (
                   <label key={i}>
                     Rank {i + 1} prize
                     <input
-                      value={p}
                       required
+                      value={p}
                       maxLength={220}
                       onChange={(e) =>
                         setPrizes(
-                          prizes.map((x, j) => (j === i ? e.target.value : x)),
+                          prizes.map((v, j) => (i === j ? e.target.value : v)),
                         )
                       }
                     />
@@ -238,8 +222,8 @@ export default function Create({ initialMode }) {
                 <div className="actions">
                   {prizes.length < 10 && (
                     <button
-                      className="add"
                       type="button"
+                      className="add"
                       onClick={() => setPrizes([...prizes, ""])}
                     >
                       <Plus size={15} />
@@ -248,8 +232,8 @@ export default function Create({ initialMode }) {
                   )}
                   {prizes.length > 1 && (
                     <button
-                      className="add"
                       type="button"
+                      className="add"
                       onClick={() => setPrizes(prizes.slice(0, -1))}
                     >
                       Remove last rank
@@ -258,21 +242,51 @@ export default function Create({ initialMode }) {
                 </div>
               </>
             )}
-          </section>
-        </div>
-        <aside className="panel summary">
-          <span className="eyebrow">
-            <TicketIcon size={15} /> INVITE PREVIEW
-          </span>
-          <h2>{title || "Your challenge"}</h2>
-          <p>{mode === "duel" ? "Head-to-head duel" : "Team challenge"}</p>
-          <Rules c={{ rounds, tries, seconds: Number(seconds) }} />
-          <p className="muted">
-            Sending locks the numbers, rules, and rewards for all players.
-          </p>
+          </div>
+        </section>
+        <aside className="panel summary buildsettings">
+          <h2>
+            <SlidersHorizontal size={20} />
+            Game settings
+          </h2>
+          <Choice
+            label="Open for"
+            value={duration}
+            onChange={setDuration}
+            options={durations}
+          />
+          <small>The clock starts when you send.</small>
+          <Choice
+            label="Tries per round"
+            value={tries}
+            onChange={setTries}
+            options={attempts}
+          />
+          <Choice
+            label="Time per guess"
+            value={seconds}
+            onChange={setSeconds}
+            options={timers}
+          />
+          <details className="optionalname">
+            <summary>Add a challenge name</summary>
+            <label className="sr" htmlFor="challengeName">
+              Challenge name
+            </label>
+            <input
+              id="challengeName"
+              name="title"
+              maxLength={90}
+              placeholder={duel ? "Head-to-head challenge" : "Team challenge"}
+            />
+          </details>
           <ErrorLine text={error} />
-          <button disabled={busy} className="btn primary full">
-            {busy ? "Creating…" : "Create & invite"}
+          <button
+            type="submit"
+            className="btn primary full"
+            disabled={busy || editingRange}
+          >
+            {busy ? "Sending…" : "Send challenge"}
             <Send size={16} />
           </button>
         </aside>

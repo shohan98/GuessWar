@@ -24,10 +24,12 @@ class ChallengeFlowTests(TestCase):
             title="Coffee Duel",
             mode="duel",
             emails=[self.player.email],
-            rounds=[dict(low=1, high=100, target=22), dict(low=1, high=100, target=33)],
-            tries=2,
+            low=1,
+            high=100,
+            numbers=[22, 33],
+            tries=3,
             seconds=10,
-            deadline=(timezone.now() + timedelta(days=1)).isoformat(),
+            duration_minutes=60,
             win="Host buys coffee",
             lose="Player buys coffee",
         )
@@ -64,10 +66,10 @@ class ChallengeFlowTests(TestCase):
         self.create()
         self.client.force_login(self.player)
         self.post(self.url + "/accept")
-        then = timezone.now() - timedelta(seconds=31)
+        then = timezone.now() - timedelta(seconds=41)
         Invitation.objects.update(started=then, turn_start=then)
         state = self.client.get(self.url).json()
-        self.assertEqual(state["revision"], 3)
+        self.assertEqual(state["revision"], 4)
         self.assertEqual(len(state["turns"]), 2)
         self.assertEqual(state["turns"][1][0]["hint"], "timeout")
 
@@ -108,4 +110,51 @@ class ChallengeFlowTests(TestCase):
                 "status"
             ],
             "expired",
+        )
+
+    def test_preset_duration_starts_at_send_and_retries_keep_deadline(self):
+        for minutes in (10, 60, 1440):
+            with self.subTest(minutes=minutes):
+                self.payload.update(
+                    request_id=str(uuid.uuid4()), duration_minutes=minutes, tries=21
+                )
+                before = timezone.now()
+                response = self.post("/api/challenges", self.payload)
+                self.assertEqual(response.status_code, 201)
+                challenge = Challenge.objects.get(id=response.json()["id"])
+                self.assertGreaterEqual(
+                    challenge.deadline, before + timedelta(minutes=minutes)
+                )
+                self.assertLessEqual(
+                    challenge.deadline, timezone.now() + timedelta(minutes=minutes)
+                )
+                deadline = challenge.deadline
+                self.assertEqual(
+                    self.post("/api/challenges", self.payload).status_code, 200
+                )
+                challenge.refresh_from_db()
+                self.assertEqual(challenge.deadline, deadline)
+                self.assertEqual(
+                    [(r["low"], r["high"]) for r in challenge.rounds], [(1, 100)] * 2
+                )
+
+    def test_invalid_rules_and_default_choices(self):
+        for invalid in (
+            {"tries": 4},
+            {"seconds": 17},
+            {"duration_minutes": 12},
+            {"low": 100},
+            {"numbers": [22, 101]},
+        ):
+            with self.subTest(invalid=invalid):
+                self.assertEqual(
+                    self.post("/api/challenges", self.payload | invalid).status_code,
+                    400,
+                )
+        for field in ("tries", "seconds", "title", "duration_minutes"):
+            self.payload.pop(field)
+        self.create()
+        c = self.invite.challenge
+        self.assertEqual(
+            (c.tries, c.seconds, c.title), (7, 10, "Head-to-head challenge")
         )

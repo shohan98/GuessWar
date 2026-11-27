@@ -243,15 +243,26 @@ export function Invite({ id, user }) {
         <div className="panel">
           <h2>{c.mode === "duel" ? "The stakes" : "What’s up for grabs"}</h2>
           <Stakes c={c} />
-          <h2 className="subhead">Round ranges</h2>
-          {c.rounds.map((r, i) => (
-            <div className="matchrow" key={i}>
-              <span>Round {i + 1}</span>
+          <h2 className="subhead">Number range</h2>
+          {c.rounds.every(
+            (r) => r.low === c.rounds[0].low && r.high === c.rounds[0].high,
+          ) ? (
+            <div className="matchrow">
+              <span>Every round</span>
               <b>
-                {r.low} — {r.high}
+                {c.rounds[0].low} — {c.rounds[0].high}
               </b>
             </div>
-          ))}
+          ) : (
+            c.rounds.map((r, i) => (
+              <div className="matchrow" key={i}>
+                <span>Round {i + 1}</span>
+                <b>
+                  {r.low} — {r.high}
+                </b>
+              </div>
+            ))
+          )}
         </div>
         <aside className="panel summary">
           <h2>Before you play</h2>

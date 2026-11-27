@@ -38,9 +38,11 @@ The local email backend prints the invitation links. Hosts can also copy each re
 
 - A duel has one opponent and two commitments. The opponent wins by solving every round before the deadline.
 - A team challenge accepts multiple email addresses and ranked prizes. Every player gets the same sequence of rounds. The final leaderboard opens at the deadline for completed runs. Ranking uses rounds solved, guesses consumed, then elapsed time. An exact tie shares a rank and prize.
-- Hosts set up to 10 rounds, each with its own range and secret. The guess limit applies per round. Setting seconds per guess to zero disables that timer. The challenge deadline still applies.
+- Hosts set one range for up to 10 secret numbers. Each round allows 3, 7 (default), 13, or 21 guesses. The guess timer defaults to 10 seconds and can be turned off. The challenge stays open for 10 minutes, 1 hour (default), or 1 day from the time the server accepts the send request.
 - Accepting starts a run. Each timed-out turn consumes a guess, including time spent away from the page. Server time governs the outcome. Refreshing resumes the run. Each guess carries the expected turn revision to prevent a retry from spending another guess.
 - Rewards and commitments are fulfilled by the participants. The app records the outcome.
+
+Saved teams are planned for a later release. A host will create a team once and select it when sending a team challenge.
 
 ## Hosting
 

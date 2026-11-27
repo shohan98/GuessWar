@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 import json
 import secrets
 import time
@@ -181,6 +183,9 @@ def create(request):
     data = dict(form.validated_data)
     emails = data.pop("emails")
     with transaction.atomic():
+        data["deadline"] = timezone.now() + timedelta(
+            minutes=data.pop("duration_minutes")
+        )
         challenge, new = Challenge.objects.get_or_create(
             host=request.user, request_id=data.pop("request_id"), defaults=data
         )
