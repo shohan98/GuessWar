@@ -1,3 +1,74 @@
 # GuessWar
 
-A browser game for private number-guessing challenges between friends and teams.
+A browser game for private number challenges. Play for the coffee bill, dish duty or stakes of your own. Choose a Single Challenge, a live head-to-head match or a team challenge.
+
+![GuessWar home screen](docs/home.webp)
+
+## Run locally
+
+Use Python 3.12 and Node.js 22 or 24. Start the API in one terminal.
+
+```sh
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+export DJANGO_DEBUG=1
+python manage.py migrate
+python manage.py runserver 127.0.0.1:8000
+```
+
+Start the frontend in a second terminal.
+
+```sh
+cd frontend
+npm ci
+npm run dev
+```
+
+Open **http://localhost:3000**. The frontend forwards same-origin API requests to Django. Development signup codes appear in the API terminal. To deliver queued invitations locally, run the following from the backend directory with the virtual environment active.
+
+```sh
+DJANGO_DEBUG=1 python manage.py send_invites
+```
+
+The local email backend prints the invitation links. Hosts can also copy each recipient’s private invitation link from the challenge detail screen.
+
+## Challenge rules
+
+- A Single Challenge has one opponent and two commitments. The opponent wins by solving every round before the deadline.
+- In Live Duo, the host locks one secret when sending. The guest accepts by locking a number in the same range. The server randomly picks the first player. Players alternate until the first correct guess wins immediately. There is no guess cap or per-turn timer. If the deadline passes first, the match expires without a winner. Progress survives refreshes and reconnects.
+- A team challenge accepts multiple email addresses and ranked prizes. Every player gets the same sequence of rounds. The final leaderboard opens at the deadline for completed runs. Ranking uses rounds solved, guesses consumed, then elapsed time. An exact tie shares a rank and prize.
+- For Single and Team Challenges, hosts set one range for up to 10 secret numbers. The range starts at 1–1,000 by default and supports an upper bound of 1,000,000. Each round allows 3, 7 (default), 13, or 21 guesses. The guess timer defaults to 10 seconds and can be turned off. The challenge stays open for 10 minutes, 1 hour (default), or 1 day from the time the server accepts the send request.
+- In Single and Team Challenges, accepting starts a run. Each timed-out turn consumes a guess, including time spent away from the page. Server time governs the outcome. Refreshing resumes the run. Each guess carries the expected turn revision to prevent a retry from spending another guess.
+- Rewards and commitments are fulfilled by the participants. The app records the outcome.
+
+Hosts create, edit and delete saved rosters under **Teams**. Sending a team challenge copies the selected roster into individual invitations. Later roster changes apply to future challenges.
+
+## Hosting
+
+The root Amplify build spec targets the Next.js app in `frontend`. Set `AMPLIFY_MONOREPO_APP_ROOT=frontend` and `API_ORIGIN` to the public HTTPS origin of your EC2 API before triggering the frontend build.
+
+Run Django on EC2 behind an HTTPS reverse proxy, using a durable local volume for SQLite and regular backups. Apply migrations before starting Gunicorn. Set the following in the service environment.
+
+| Variable | Value |
+| --- | --- |
+| DJANGO_SECRET_KEY | A generated private secret |
+| DJANGO_ALLOWED_HOSTS | Comma-separated allowed API hostnames |
+| WEB_ORIGIN | Exact HTTPS origin of the Amplify frontend or custom domain |
+| DATABASE_PATH | Absolute path on a persistent volume writable by the API and invitation worker |
+| SMTP_HOST, SMTP_PORT | Transactional SMTP host and port |
+| SMTP_USER, SMTP_PASSWORD | SMTP credentials |
+| SMTP_TLS, FROM_EMAIL | Use 1 for STARTTLS and configure a verified sender address |
+
+Leave development mode disabled in production. From the backend working directory run `gunicorn config.wsgi:application --bind 127.0.0.1:8000`. Schedule `python manage.py send_invites` once per minute with the same environment as the API. Failed sends remain queued for retry. A host can see whether SMTP has accepted each invitation. Deployment and sender setup are external to this repository.
+
+## Verification
+
+```sh
+cd backend
+DJANGO_DEBUG=1 python manage.py test
+cd ../frontend
+npm ci
+npm run build
+```
